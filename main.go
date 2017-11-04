@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"os"
 	"os/exec"
@@ -33,7 +34,9 @@ func main() {
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	errbuf := bufio.NewWriter(os.Stderr)
+	cmd.Stderr = errbuf
+	defer errbuf.Flush()
 
 	err := cmd.Run()
 	if err == nil {
@@ -55,6 +58,7 @@ func main() {
 		os.Exit(int(status))
 	}
 
+	errbuf.Reset(os.Stderr)
 	// Perform a dictionary lookup on the one word that we found.
 	word := os.Args[1]
 	err = lookupDictionaryWord(word)

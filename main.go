@@ -61,7 +61,7 @@ func main() {
 	errbuf.Reset(os.Stderr)
 	// Perform a dictionary lookup on the one word that we found.
 	word := os.Args[1]
-	err = lookupDictionaryWord(word)
+	err = lookupDictionaryWord(word, os.Stdout)
 	if err != nil {
 		log.Fatalf("Could not find dictionary word for '%s': %s", word, err.Error())
 	}

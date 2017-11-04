@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -22,7 +23,19 @@ var Config = struct {
 	"https://od-api.oxforddictionaries.com/api/v1",
 }
 
-func lookupDictionaryWord(word string) error {
+type definitions struct {
+	Results []struct {
+		LexicalEntries []struct {
+			Entries []struct {
+				Senses []struct {
+					Definitions []string
+				}
+			}
+		}
+	}
+}
+
+func lookupDictionaryWord(word string, w io.Writer) error {
 	if word == "" {
 		return errors.New("empty word provided, cannot perform dictionary lookup")
 	}
@@ -32,10 +45,17 @@ func lookupDictionaryWord(word string) error {
 		return errors.Wrap(err, "could not load apikey")
 	}
 
-	_, err = findWord(word)
+	wordID, err := findWord(word)
 	if err != nil {
 		return errors.Wrap(err, "not found")
 	}
+
+	definitions, err := fetchDefinitions(wordID)
+	if err != nil {
+		return errors.Wrap(err, "could not load definitions")
+	}
+
+	fmt.Fprintln(w, definitions.Results[0].LexicalEntries[0].Entries[0].Senses[0].Definitions[0])
 
 	return nil
 }
@@ -69,6 +89,11 @@ func findWord(word string) (string, error) {
 		return "", errors.New("no matches for word")
 	}
 	return r.Results[0].ID, nil
+}
+
+func fetchDefinitions(wordID string) (definitions, error) {
+	var defs definitions
+	return defs, request("/entries/en/"+wordID, nil, &defs)
 }
 
 // request submits a request to the Oxfort Dictionaries API and parses it as JSON into the given object.

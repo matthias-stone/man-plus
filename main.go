@@ -17,6 +17,10 @@ import (
 // Determined by experimentation.
 const ManPageNotFoundExitCode = 4096
 
+func init() {
+	log.SetFlags(0)
+}
+
 func main() {
 	cmd := exec.Command("man", os.Args[1:]...)
 

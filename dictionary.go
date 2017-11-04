@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
+	"net/http"
 	"os"
 
 	"github.com/burntsushi/toml"
@@ -30,6 +32,11 @@ func lookupDictionaryWord(word string) error {
 		return errors.Wrap(err, "could not load apikey")
 	}
 
+	_, err = findWord(word)
+	if err != nil {
+		return errors.Wrap(err, "not found")
+	}
+
 	return nil
 }
 
@@ -44,4 +51,48 @@ func loadConfig() error {
 		return errors.New("config value APIKey must be specified in the config file: " + ConfigPath)
 	}
 	return nil
+}
+
+// Returns the word_id from the API, or error if there were no results.
+func findWord(word string) (string, error) {
+	r := struct{ Results []struct{ Word, ID string } }{}
+	params := map[string]string{
+		"q":      word,
+		"prefix": "false",
+		"limit":  "1",
+	}
+	err := request("/search/en", params, &r)
+	switch {
+	case err != nil:
+		return "", err
+	case len(r.Results) != 1:
+		return "", errors.New("no matches for word")
+	}
+	return r.Results[0].ID, nil
+}
+
+// request submits a request to the Oxfort Dictionaries API and parses it as JSON into the given object.
+func request(path string, parameters map[string]string, v interface{}) error {
+	req, err := http.NewRequest("GET", Config.URL+path, nil)
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("app_id", Config.AppID)
+	req.Header.Add("app_key", Config.APIKey)
+
+	values := req.URL.Query()
+	for key, value := range parameters {
+		values.Add(key, value)
+	}
+	req.URL.RawQuery = values.Encode()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "connecting to "+req.URL.String())
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("unexpected " + resp.Status + " from " + req.URL.String())
+	}
+
+	defer resp.Body.Close()
+	return json.NewDecoder(resp.Body).Decode(v)
 }

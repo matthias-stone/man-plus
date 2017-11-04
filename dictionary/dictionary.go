@@ -1,26 +1,20 @@
-package main
+package dictionary
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
 
-	"github.com/burntsushi/toml"
 	"github.com/pkg/errors"
 )
 
-// ConfigPath is the location of man-plus' config file.
-var ConfigPath = os.ExpandEnv("$HOME/.config/man-plus.toml")
+type Client struct {
+	appID, apiKey string
+	baseURL       string
+}
 
-// Config values
-var Config = struct {
-	AppID, APIKey string
-	URL           string
-}{
-	"", "",
-	"https://od-api.oxforddictionaries.com/api/v1",
+func NewClient(appID, APIKey, rootURL string) *Client {
+	return &Client{appID, APIKey, rootURL}
 }
 
 type definitions struct {
@@ -35,22 +29,17 @@ type definitions struct {
 	}
 }
 
-func lookupDictionaryWord(word string, w io.Writer) error {
+func (c *Client) LookupDictionaryWord(word string, w io.Writer) error {
 	if word == "" {
 		return errors.New("empty word provided, cannot perform dictionary lookup")
 	}
 
-	err := loadConfig()
-	if err != nil {
-		return errors.Wrap(err, "could not load apikey")
-	}
-
-	wordID, err := findWord(word)
+	wordID, err := c.findWord(word)
 	if err != nil {
 		return errors.Wrap(err, "not found")
 	}
 
-	definitions, err := fetchDefinitions(wordID)
+	definitions, err := c.fetchDefinitions(wordID)
 	if err != nil {
 		return errors.Wrap(err, "could not load definitions")
 	}
@@ -60,28 +49,15 @@ func lookupDictionaryWord(word string, w io.Writer) error {
 	return nil
 }
 
-func loadConfig() error {
-	_, err := toml.DecodeFile(ConfigPath, &Config)
-	switch {
-	case err != nil:
-		return err
-	case Config.AppID == "":
-		return errors.New("config value AppID must be specified in the config file: " + ConfigPath)
-	case Config.AppID == "":
-		return errors.New("config value APIKey must be specified in the config file: " + ConfigPath)
-	}
-	return nil
-}
-
 // Returns the word_id from the API, or error if there were no results.
-func findWord(word string) (string, error) {
+func (c *Client) findWord(word string) (string, error) {
 	r := struct{ Results []struct{ Word, ID string } }{}
 	params := map[string]string{
 		"q":      word,
 		"prefix": "false",
 		"limit":  "1",
 	}
-	err := request("/search/en", params, &r)
+	err := c.request("/search/en", params, &r)
 	switch {
 	case err != nil:
 		return "", err
@@ -91,18 +67,18 @@ func findWord(word string) (string, error) {
 	return r.Results[0].ID, nil
 }
 
-func fetchDefinitions(wordID string) (definitions, error) {
+func (c *Client) fetchDefinitions(wordID string) (definitions, error) {
 	var defs definitions
-	return defs, request("/entries/en/"+wordID, nil, &defs)
+	return defs, c.request("/entries/en/"+wordID, nil, &defs)
 }
 
-// request submits a request to the Oxfort Dictionaries API and parses it as JSON into the given object.
-func request(path string, parameters map[string]string, v interface{}) error {
-	req, err := http.NewRequest("GET", Config.URL+path, nil)
+// request submits a request to the Oxford Dictionaries API and parses it as JSON into the given object.
+func (c *Client) request(path string, parameters map[string]string, v interface{}) error {
+	req, err := http.NewRequest("GET", c.baseURL+path, nil)
 
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("app_id", Config.AppID)
-	req.Header.Add("app_key", Config.APIKey)
+	req.Header.Add("app_id", c.appID)
+	req.Header.Add("app_key", c.apiKey)
 
 	values := req.URL.Query()
 	for key, value := range parameters {

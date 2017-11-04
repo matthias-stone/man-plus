@@ -2,8 +2,11 @@ package dictionary
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 
 	"github.com/pkg/errors"
 )
@@ -19,14 +22,51 @@ func NewClient(appID, APIKey, rootURL string) *Client {
 
 type definitions struct {
 	Results []struct {
+		ID             string `json:"id"`
+		Language       string `json:"language"`
 		LexicalEntries []struct {
 			Entries []struct {
+				Etymologies         []string `json:"etymologies"`
+				GrammaticalFeatures []struct {
+					Text string `json:"text"`
+					Type string `json:"type"`
+				} `json:"grammaticalFeatures"`
+				HomographNumber string `json:"homographNumber"`
+				Notes           []struct {
+					Text string `json:"text"`
+					Type string `json:"type"`
+				} `json:"notes"`
 				Senses []struct {
-					Definitions []string
-				}
-			}
-		}
-	}
+					Definitions []string `json:"definitions"`
+					Domains     []string `json:"domains,omitempty"`
+					Examples    []struct {
+						Text string `json:"text"`
+					} `json:"examples,omitempty"`
+					ID        string `json:"id"`
+					Subsenses []struct {
+						Definitions []string `json:"definitions"`
+						Domains     []string `json:"domains,omitempty"`
+						ID          string   `json:"id"`
+						Examples    []struct {
+							Text string `json:"text"`
+						} `json:"examples,omitempty"`
+					} `json:"subsenses,omitempty"`
+					Regions []string `json:"regions,omitempty"`
+				} `json:"senses"`
+			} `json:"entries"`
+			Language        string `json:"language"`
+			LexicalCategory string `json:"lexicalCategory"`
+			Pronunciations  []struct {
+				AudioFile        string   `json:"audioFile"`
+				Dialects         []string `json:"dialects"`
+				PhoneticNotation string   `json:"phoneticNotation"`
+				PhoneticSpelling string   `json:"phoneticSpelling"`
+			} `json:"pronunciations"`
+			Text string `json:"text"`
+		} `json:"lexicalEntries"`
+		Type string `json:"type"`
+		Word string `json:"word"`
+	} `json:"results"`
 }
 
 func (c *Client) LookupDictionaryWord(word string, w io.Writer) error {
@@ -44,7 +84,26 @@ func (c *Client) LookupDictionaryWord(word string, w io.Writer) error {
 		return errors.Wrap(err, "could not load definitions")
 	}
 
-	fmt.Fprintln(w, definitions.Results[0].LexicalEntries[0].Entries[0].Senses[0].Definitions[0])
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		fmt.Fprintln(pw, ".TH "+word+" "+definitions.Results[0].Language+` "Definitions (man-plus)" man-plus "Definitions (man-plus)"`)
+		fmt.Fprintln(pw, ".SH DEFINITIONS")
+		for _, le := range definitions.Results[0].LexicalEntries {
+			for _, def := range le.Entries[0].Senses[0].Definitions {
+				fmt.Fprintln(pw, "")
+				fmt.Fprintln(pw, def)
+			}
+		}
+	}()
+
+	cmd := exec.Command("man", "/dev/stdin")
+
+	cmd.Stdin = pr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	cmd.Run()
 
 	return nil
 }

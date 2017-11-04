@@ -4,6 +4,13 @@
 // A simple way to deploy:
 //    alias man=man-plus
 //
+// man-plus requires an API key for the Oxford Dictionaries. A user is required
+// provide their own app ID and key, available at https://developer.oxforddictionaries.com/.
+// Once acquired the values should be stored in the file ~/.config/man-plus.toml
+// with the following format:
+//     AppID = "MyAppID"
+//     APIKey = "MyAPIKey"
+//
 package main
 
 import (
